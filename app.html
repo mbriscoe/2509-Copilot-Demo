@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>2-Player Card Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f8f9fa;
+        }
+
+        .card-ascii {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 1.2rem;
+            white-space: pre;
+            background: #fff;
+            border-radius: 0.5rem;
+            box-shadow: 0 0 8px #ccc;
+            display: inline-block;
+            margin: 0 0.5rem;
+            padding: 0.5rem;
+            line-height: 1.2;
+            letter-spacing: 0;
+        }
+
+        .red {
+            color: #d00;
+        }
+
+        .black {
+            color: #222;
+        }
+
+        .bg-white {
+            background: #fff;
+        }
+
+        .score-box {
+            font-size: 1.2rem;
+            margin-top: 1rem;
+        }
+
+        .winner {
+            font-weight: bold;
+            font-size: 1.3rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container py-4">
+        <div class="row">
+            <div class="col-12 text-center mb-3">
+                <h2 class="text-primary">2-Player Card Game</h2>
+                <p class="lead">Each player is dealt a card. The highest card wins the hand and gets both cards.<br>
+                    The process repeats until all 52 cards are dealt.<br>
+                    The player with the highest score at the end wins the game.</p>
+            </div>
+        </div>
+        <div class="row justify-content-center mb-4">
+            <div class="col-auto text-center">
+                <button id="startBtn" class="btn btn-success btn-lg">Start Game</button>
+                <button id="nextBtn" class="btn btn-primary btn-lg d-none">Next Hand</button>
+                <button id="restartBtn" class="btn btn-secondary btn-lg d-none">Restart</button>
+            </div>
+        </div>
+        <div class="row justify-content-center mb-3">
+            <div class="col-auto text-center">
+                <div id="handNum" class="mb-2"></div>
+                <div id="cardsArea"></div>
+            </div>
+        </div>
+        <div class="row justify-content-center">
+            <div class="col-auto text-center score-box">
+                <span id="score1" class="text-primary"></span>
+                <span id="score2" class="text-success ms-4"></span>
+                <div id="winnerMsg" class="winner"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Card and Deck setup
+        const suits = ['Hearts', 'Diamonds', 'Clubs', 'Spades'];
+        const ranks = [
+            { name: '2', value: 2 }, { name: '3', value: 3 }, { name: '4', value: 4 },
+            { name: '5', value: 5 }, { name: '6', value: 6 }, { name: '7', value: 7 },
+            { name: '8', value: 8 }, { name: '9', value: 9 }, { name: '10', value: 10 },
+            { name: 'J', value: 11 }, { name: 'Q', value: 12 }, { name: 'K', value: 13 }, { name: 'A', value: 14 }
+        ];
+
+        function createDeck()
+        {
+            const deck = [];
+            for (const suit of suits)
+            {
+                for (const rank of ranks)
+                {
+                    deck.push({ suit, rank: rank.name, value: rank.value });
+                }
+            }
+            return deck;
+        }
+
+        function shuffle(deck)
+        {
+            for (let i = deck.length - 1; i > 0; i--)
+            {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        function getCardColor(suit)
+        {
+            return (suit === 'Hearts' || suit === 'Diamonds') ? 'red' : 'black';
+        }
+
+        function getSuitSymbol(suit)
+        {
+            switch (suit)
+            {
+                case 'Hearts': return '♥';
+                case 'Diamonds': return '♦';
+                case 'Clubs': return '♣';
+                case 'Spades': return '♠';
+                default: return '?';
+            }
+        }
+
+        function renderCard(card)
+        {
+            const suitSymbol = getSuitSymbol(card.suit);
+            const rankLeft = card.rank.padEnd(2, ' ');
+            const rankRight = card.rank.padStart(2, ' ');
+            const colorClass = getCardColor(card.suit);
+            // All lines are exactly 9 chars wide, using box drawing characters for connected borders
+            const lines = [
+                `<span class="bg-white ${colorClass}">┌───────┐</span>`,
+                `<span class="bg-white ${colorClass}">│${rankLeft}     │</span>`,
+                `<span class="bg-white ${colorClass}">│       │</span>`,
+                `<span class="bg-white ${colorClass}">│   ${suitSymbol}   │</span>`,
+                `<span class="bg-white ${colorClass}">│       │</span>`,
+                `<span class="bg-white ${colorClass}">│     ${rankRight}│</span>`,
+                `<span class="bg-white ${colorClass}">└───────┘</span>`
+            ];
+            return `<div class="card-ascii">${lines.join('<br>')}</div>`;
+        }
+
+        function renderCardsSideBySide(card1, card2)
+        {
+            return renderCard(card1) + renderCard(card2);
+        }
+
+        // Game state
+        let deck = [];
+        let handIndex = 0;
+        let player1Score = 0;
+        let player2Score = 0;
+
+        function showScores()
+        {
+            document.getElementById('score1').textContent = `Player 1: ${player1Score}`;
+            document.getElementById('score2').textContent = `Player 2: ${player2Score}`;
+        }
+
+        function showHand()
+        {
+            if (handIndex >= deck.length)
+            {
+                showGameOver();
+                return;
+            }
+            document.getElementById('handNum').textContent = `Hand ${Math.floor(handIndex / 2) + 1}`;
+            const card1 = deck[handIndex];
+            const card2 = deck[handIndex + 1];
+            document.getElementById('cardsArea').innerHTML = renderCardsSideBySide(card1, card2);
+
+            let resultMsg = '';
+            if (card1.value > card2.value)
+            {
+                player1Score += 2;
+                resultMsg = '<span class="text-primary">Player 1 wins the hand.</span>';
+            } else if (card2.value > card1.value)
+            {
+                player2Score += 2;
+                resultMsg = '<span class="text-success">Player 2 wins the hand.</span>';
+            } else
+            {
+                player1Score += 1;
+                player2Score += 1;
+                resultMsg = '<span class="text-warning">Tie! Both players get 1 point.</span>';
+            }
+            showScores();
+            document.getElementById('winnerMsg').innerHTML = resultMsg;
+        }
+
+        function showGameOver()
+        {
+            document.getElementById('handNum').textContent = 'Game Over!';
+            document.getElementById('cardsArea').innerHTML = '';
+            showScores();
+            let winnerMsg = '';
+            if (player1Score > player2Score)
+            {
+                winnerMsg = '<span class="text-primary">Player 1 wins the game!</span>';
+            } else if (player2Score > player1Score)
+            {
+                winnerMsg = '<span class="text-success">Player 2 wins the game!</span>';
+            } else
+            {
+                winnerMsg = '<span class="text-warning">The game is a tie!</span>';
+            }
+            document.getElementById('winnerMsg').innerHTML = winnerMsg;
+            document.getElementById('nextBtn').classList.add('d-none');
+            document.getElementById('restartBtn').classList.remove('d-none');
+        }
+
+        document.getElementById('startBtn').onclick = function ()
+        {
+            deck = shuffle(createDeck());
+            handIndex = 0;
+            player1Score = 0;
+            player2Score = 0;
+            document.getElementById('startBtn').classList.add('d-none');
+            document.getElementById('nextBtn').classList.remove('d-none');
+            document.getElementById('restartBtn').classList.add('d-none');
+            document.getElementById('winnerMsg').innerHTML = '';
+            showHand();
+        };
+
+        document.getElementById('nextBtn').onclick = function ()
+        {
+            handIndex += 2;
+            showHand();
+        };
+
+        document.getElementById('restartBtn').onclick = function ()
+        {
+            deck = shuffle(createDeck());
+            handIndex = 0;
+            player1Score = 0;
+            player2Score = 0;
+            document.getElementById('startBtn').classList.add('d-none');
+            document.getElementById('nextBtn').classList.remove('d-none');
+            document.getElementById('restartBtn').classList.add('d-none');
+            document.getElementById('winnerMsg').innerHTML = '';
+            showHand();
+        };
+    </script>
+</body>
+
+</html>
